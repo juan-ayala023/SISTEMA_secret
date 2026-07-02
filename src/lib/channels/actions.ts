@@ -4,8 +4,10 @@ import { revalidatePath } from 'next/cache';
 import { requireRole } from '@/lib/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { channelSchema, type ChannelInput } from './schema';
+import { runChannelSync, type SyncResult } from './sync';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+export type { SyncResult };
 
 const ROLES = ['admin', 'manager'] as const;
 
@@ -61,4 +63,24 @@ export async function deleteChannel(id: string): Promise<ActionResult> {
 
   revalidatePath('/settings/channels');
   return { ok: true };
+}
+
+// Importa (manual) los bloqueos del iCal de una conexión y los refleja como
+// reservas. Idempotente: hace upsert por external_uid (a nivel aplicación,
+// pues external_uid no es único en el esquema). El cron automático se maneja
+// fuera de la app (n8n).
+export async function syncChannel(id: string): Promise<SyncResult> {
+  await requireRole([...ROLES]);
+  // Cliente con sesión (RLS): la conexión queda limitada a la propiedad
+  // del usuario. Reutiliza el mismo core que el Route Handler.
+  const supabase = await createClient();
+  const result = await runChannelSync(supabase, id);
+
+  if (result.ok) {
+    revalidatePath('/settings/channels');
+    revalidatePath('/reservations');
+    revalidatePath('/calendar');
+    revalidatePath('/');
+  }
+  return result;
 }

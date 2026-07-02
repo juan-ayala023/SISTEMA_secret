@@ -10,7 +10,8 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Todas las rutas excepto assets estáticos y archivos de imagen.
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Todas las rutas excepto /api (autentican con su propio token),
+    // assets estáticos y archivos de imagen.
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

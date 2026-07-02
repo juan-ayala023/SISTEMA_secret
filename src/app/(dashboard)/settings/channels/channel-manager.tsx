@@ -6,10 +6,21 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { ArrowLeft, Cable, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale';
+import {
+  ArrowLeft,
+  Cable,
+  Loader2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react';
 import {
   createChannel,
   deleteChannel,
+  syncChannel,
   updateChannel,
 } from '@/lib/channels/actions';
 import { CHANNELS, channelSchema, type ChannelInput } from '@/lib/channels/schema';
@@ -52,6 +63,7 @@ export function ChannelManager({
   const [editing, setEditing] = useState<ChannelRow | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [deleting, setDeleting] = useState<ChannelRow | null>(null);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const empty: ChannelInput = {
@@ -111,6 +123,22 @@ export function ChannelManager({
       }
       toast.success('Conexión eliminada');
       setDeleting(null);
+      router.refresh();
+    });
+  }
+
+  function sync(c: ChannelRow) {
+    setSyncingId(c.id);
+    startTransition(async () => {
+      const res = await syncChannel(c.id);
+      setSyncingId(null);
+      if (!res.ok) {
+        toast.error('No se pudo sincronizar', { description: res.error });
+        return;
+      }
+      toast.success('Sincronización completa', {
+        description: `${res.imported} importadas · ${res.updated} actualizadas · ${res.ignored} ignoradas`,
+      });
       router.refresh();
     });
   }
@@ -176,8 +204,30 @@ export function ChannelManager({
                   <p className="truncate text-sm text-muted-foreground">
                     {c.ical_import_url || 'Sin URL'}
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    {c.last_synced_at
+                      ? `Sincronizado: ${format(
+                          parseISO(c.last_synced_at),
+                          "d MMM yyyy, HH:mm",
+                          { locale: es },
+                        )}`
+                      : 'Nunca sincronizado'}
+                  </p>
                 </div>
                 <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!c.ical_import_url || syncingId === c.id}
+                    onClick={() => sync(c)}
+                  >
+                    {syncingId === c.id ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="size-3.5" />
+                    )}
+                    Sincronizar
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon-sm"

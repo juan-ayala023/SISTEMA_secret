@@ -30,8 +30,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — se ignoran todos (.env, .env.local, .env.*.local, …)
+# MENOS el ejemplo con placeholders, que sí se versiona.
 .env*
+!.env.example
 
 # vercel
 .vercel

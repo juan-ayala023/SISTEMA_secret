@@ -14,6 +14,22 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 const ROLES = ['admin', 'manager', 'reception'] as const;
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
 
+// Máquina de transiciones de estado. Claves literales con exhaustividad
+// garantizada por Record<ReservationStatus, …>: si falta o sobra una clave el
+// compilador falla, sin depender del orden de RESERVATION_STATUSES. Los estados
+// terminales (checked_out, cancelled, no_show) no admiten ninguna transición.
+type ReservationStatus = (typeof RESERVATION_STATUSES)[number];
+const STATUS_TRANSITIONS: Record<
+  ReservationStatus,
+  readonly ReservationStatus[]
+> = {
+  confirmed: ['checked_in', 'cancelled', 'no_show'],
+  checked_in: ['checked_out', 'cancelled'],
+  checked_out: [],
+  cancelled: [],
+  no_show: [],
+};
+
 // Traduce errores de constraints de Postgres a mensajes de usuario.
 function mapDbError(code?: string, fallback = 'Error al guardar'): string {
   if (code === '23P01') return 'La habitación ya está ocupada en esas fechas.';
@@ -118,6 +134,28 @@ export async function setReservationStatus(
   }
 
   const supabase = await createClient();
+
+  // Lee el estado actual. Si no existe o RLS la oculta, data es null.
+  const { data: current } = await supabase
+    .from('reservations')
+    .select('status')
+    .eq('id', id)
+    .maybeSingle();
+  if (!current) return { ok: false, error: 'Reserva no encontrada' };
+
+  const actual = current.status as ReservationStatus;
+
+  // No-op idempotente: mismo estado, no se toca la DB.
+  if (actual === status) return { ok: true };
+
+  // Guard de transición: el destino debe estar permitido desde el actual.
+  if (!STATUS_TRANSITIONS[actual].includes(status)) {
+    return {
+      ok: false,
+      error: `No se puede cambiar de ${actual} a ${status}`,
+    };
+  }
+
   // Al pasar a checked_out, un trigger marca la habitación como 'dirty'.
   const { error } = await supabase
     .from('reservations')

@@ -5,6 +5,7 @@ import {
   ChannelManager,
   type ChannelRow,
   type ChannelRoomType,
+  type SyncStatusRow,
 } from './channel-manager';
 
 export default async function ChannelsPage() {
@@ -12,7 +13,7 @@ export default async function ChannelsPage() {
   const propertyId = profile.property_id!;
 
   const supabase = await createClient();
-  const [connRes, typesRes] = await Promise.all([
+  const [connRes, typesRes, syncRes] = await Promise.all([
     supabase
       .from('channel_connections')
       .select('*, room_type:room_types(name)')
@@ -23,6 +24,11 @@ export default async function ChannelsPage() {
       .select('id, name')
       .eq('property_id', propertyId)
       .order('name'),
+    supabase
+      .from('channel_sync_status')
+      .select('channel, status, last_success_at, message')
+      .eq('property_id', propertyId)
+      .in('channel', ['airbnb', 'booking']),
   ]);
 
   const connections =
@@ -34,6 +40,7 @@ export default async function ChannelsPage() {
     <ChannelManager
       connections={connections as ChannelRow[]}
       roomTypes={(typesRes.data as ChannelRoomType[]) ?? []}
+      syncStatus={(syncRes.data as SyncStatusRow[]) ?? []}
     />
   );
 }

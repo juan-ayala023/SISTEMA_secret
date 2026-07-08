@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { format, parseISO } from 'date-fns';
+import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
   ArrowLeft,
@@ -44,9 +44,25 @@ export type ChannelRow = ChannelConnection & {
   room_type: { name: string } | null;
 };
 
+type SyncState = 'idle' | 'running' | 'ok' | 'error';
+export type SyncStatusRow = {
+  channel: string;
+  status: SyncState;
+  last_success_at: string | null;
+  message: string | null;
+};
+
 const CHANNEL_LABELS: Record<(typeof CHANNELS)[number], string> = {
   airbnb: 'Airbnb',
   booking: 'Booking.com',
+};
+
+// Badge de estado para el resumen de sincronización (solo informativo).
+const SYNC_BADGE: Record<SyncState, { label: string; className: string }> = {
+  idle: { label: 'En espera', className: 'bg-slate-100 text-slate-600' },
+  running: { label: 'Sincronizando…', className: 'bg-amber-100 text-amber-700' },
+  ok: { label: 'OK', className: 'bg-emerald-100 text-emerald-700' },
+  error: { label: 'Error', className: 'bg-red-100 text-red-700' },
 };
 
 const selectClass =
@@ -55,9 +71,11 @@ const selectClass =
 export function ChannelManager({
   connections,
   roomTypes,
+  syncStatus,
 }: {
   connections: ChannelRow[];
   roomTypes: ChannelRoomType[];
+  syncStatus: SyncStatusRow[];
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<ChannelRow | null>(null);
@@ -174,6 +192,39 @@ export function ChannelManager({
           automática (importar/exportar disponibilidad) se conectará en una fase
           posterior; por ahora es el registro de las conexiones.
         </p>
+      </div>
+
+      {/* Estado de sincronización por canal — solo lectura (Item 5 · Fase A) */}
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Estado de sincronización</p>
+        <Card className="p-0">
+          <ul className="divide-y">
+            {CHANNELS.map((ch) => {
+              const s = syncStatus.find((x) => x.channel === ch);
+              const badge = SYNC_BADGE[s?.status ?? 'idle'];
+              return (
+                <li key={ch} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="w-24 shrink-0 text-sm font-medium">
+                    {CHANNEL_LABELS[ch]}
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}
+                  >
+                    {badge.label}
+                  </span>
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {s?.last_success_at
+                      ? `Última sincronización: ${formatDistanceToNow(
+                          parseISO(s.last_success_at),
+                          { addSuffix: true, locale: es },
+                        )}`
+                      : 'Sin sincronizar aún'}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
       </div>
 
       {connections.length === 0 ? (
